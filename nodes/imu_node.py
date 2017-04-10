@@ -119,8 +119,8 @@ class imu_node():
         self.magn_z_min = rospy.get_param('~magn_z_min', -600.0)
         self.magn_z_max = rospy.get_param('~magn_z_max', 600.0)
         self.calibration_magn_use_extended = rospy.get_param('~calibration_magn_use_extended', False)
-        self.magn_ellipsoid_center = rospy.get_param('~magn_ellipsoid_center', [0, 0, 0])
-        self.magn_ellipsoid_transform = rospy.get_param('~magn_ellipsoid_transform', [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+        self.magn_ellipsoid_center = rospy.get_param('~self.magn_ellipsoid_center', [0, 0, 0])
+        self.magn_ellipsoid_transform = rospy.get_param('~self.magn_ellipsoid_transform', [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
         self.imu_yaw_calibration = rospy.get_param('~imu_yaw_calibration', 0.0)
 
         # gyroscope
@@ -130,7 +130,7 @@ class imu_node():
 
         #rospy.loginfo("%f %f %f %f %f %f", accel_x_min, accel_x_max, accel_y_min, accel_y_max, accel_z_min, accel_z_max)
         #rospy.loginfo("%f %f %f %f %f %f", magn_x_min, magn_x_max, magn_y_min, magn_y_max, magn_z_min, magn_z_max)
-        #rospy.loginfo("%s %s %s", str(calibration_magn_use_extended), str(magn_ellipsoid_center), str(magn_ellipsoid_transform[0][0]))
+        #rospy.loginfo("%s %s %s", str(calibration_magn_use_extended), str(self.magn_ellipsoid_center), str(self.magn_ellipsoid_transform[0][0]))
         #rospy.loginfo("%f %f %f", gyro_average_offset_x, gyro_average_offset_y, gyro_average_offset_z)
 
         # Check your COM port and baud rate
@@ -165,38 +165,41 @@ class imu_node():
         ser.write('#ox' + chr(13)) # To start display angle and sensor reading in text
 
         rospy.loginfo("Writing calibration values to razor IMU board...")
+
         #set calibration values
-        ser.write('#caxm' + str(accel_x_min) + chr(13))
-        ser.write('#caxM' + str(accel_x_max) + chr(13))
-        ser.write('#caym' + str(accel_y_min) + chr(13))
-        ser.write('#cayM' + str(accel_y_max) + chr(13))
-        ser.write('#cazm' + str(accel_z_min) + chr(13))
-        ser.write('#cazM' + str(accel_z_max) + chr(13))
+        ser.write('#caxm' + str(self.accel_x_min) + chr(13))
+        ser.write('#caxM' + str(self.accel_x_max) + chr(13))
+        ser.write('#caym' + str(self.accel_y_min) + chr(13))
+        ser.write('#cayM' + str(self.accel_y_max) + chr(13))
+        ser.write('#cazm' + str(self.accel_z_min) + chr(13))
+        ser.write('#cazM' + str(self.accel_z_max) + chr(13))
 
+        #calibration values for magnetometer
         if (not calibration_magn_use_extended):
-            ser.write('#cmxm' + str(magn_x_min) + chr(13))
-            ser.write('#cmxM' + str(magn_x_max) + chr(13))
-            ser.write('#cmym' + str(magn_y_min) + chr(13))
-            ser.write('#cmyM' + str(magn_y_max) + chr(13))
-            ser.write('#cmzm' + str(magn_z_min) + chr(13))
-            ser.write('#cmzM' + str(magn_z_max) + chr(13))
+            ser.write('#cmxm' + str(self.magn_x_min) + chr(13))
+            ser.write('#cmxM' + str(self.magn_x_max) + chr(13))
+            ser.write('#cmym' + str(self.magn_y_min) + chr(13))
+            ser.write('#cmyM' + str(self.magn_y_max) + chr(13))
+            ser.write('#cmzm' + str(self.magn_z_min) + chr(13))
+            ser.write('#cmzM' + str(self.magn_z_max) + chr(13))
         else:
-            ser.write('#ccx' + str(magn_ellipsoid_center[0]) + chr(13))
-            ser.write('#ccy' + str(magn_ellipsoid_center[1]) + chr(13))
-            ser.write('#ccz' + str(magn_ellipsoid_center[2]) + chr(13))
-            ser.write('#ctxX' + str(magn_ellipsoid_transform[0][0]) + chr(13))
-            ser.write('#ctxY' + str(magn_ellipsoid_transform[0][1]) + chr(13))
-            ser.write('#ctxZ' + str(magn_ellipsoid_transform[0][2]) + chr(13))
-            ser.write('#ctyX' + str(magn_ellipsoid_transform[1][0]) + chr(13))
-            ser.write('#ctyY' + str(magn_ellipsoid_transform[1][1]) + chr(13))
-            ser.write('#ctyZ' + str(magn_ellipsoid_transform[1][2]) + chr(13))
-            ser.write('#ctzX' + str(magn_ellipsoid_transform[2][0]) + chr(13))
-            ser.write('#ctzY' + str(magn_ellipsoid_transform[2][1]) + chr(13))
-            ser.write('#ctzZ' + str(magn_ellipsoid_transform[2][2]) + chr(13))
+            ser.write('#ccx' + str(self.magn_ellipsoid_center[0]) + chr(13))
+            ser.write('#ccy' + str(self.magn_ellipsoid_center[1]) + chr(13))
+            ser.write('#ccz' + str(self.magn_ellipsoid_center[2]) + chr(13))
+            ser.write('#ctxX' + str(self.magn_ellipsoid_transform[0][0]) + chr(13))
+            ser.write('#ctxY' + str(self.magn_ellipsoid_transform[0][1]) + chr(13))
+            ser.write('#ctxZ' + str(self.magn_ellipsoid_transform[0][2]) + chr(13))
+            ser.write('#ctyX' + str(self.magn_ellipsoid_transform[1][0]) + chr(13))
+            ser.write('#ctyY' + str(self.magn_ellipsoid_transform[1][1]) + chr(13))
+            ser.write('#ctyZ' + str(self.magn_ellipsoid_transform[1][2]) + chr(13))
+            ser.write('#ctzX' + str(self.magn_ellipsoid_transform[2][0]) + chr(13))
+            ser.write('#ctzY' + str(self.magn_ellipsoid_transform[2][1]) + chr(13))
+            ser.write('#ctzZ' + str(self.magn_ellipsoid_transform[2][2]) + chr(13))
 
-        ser.write('#cgx' + str(gyro_average_offset_x) + chr(13))
-        ser.write('#cgy' + str(gyro_average_offset_y) + chr(13))
-        ser.write('#cgz' + str(gyro_average_offset_z) + chr(13))
+        #Compensating for offset of gyro-drift 
+        ser.write('#cgx' + str(self.gyro_average_offset_x) + chr(13))
+        ser.write('#cgy' + str(self.gyro_average_offset_y) + chr(13))
+        ser.write('#cgz' + str(self.gyro_average_offset_z) + chr(13))
 
         #print calibration values for verification by user
         ser.flushInput()
