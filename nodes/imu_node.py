@@ -88,7 +88,7 @@ imuMsg.linear_acceleration_covariance = [
 class imu_node():
 
     def __init__(self):
-        # host = port
+        self.host = rospy.get_param('~port', '192.168.17.201')
         self.port = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
         self.port.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         self.port.setsockopt(socket.SOL_TCP, socket.TCP_KEEPIDLE, 30)
@@ -96,43 +96,37 @@ class imu_node():
 
         rospy.init_node("razor_node")
         #We only care about the most recent measurement, i.e. queue_size=1
-        pub = rospy.Publisher('imu', Imu, queue_size=1)
-        srv = Server(imuConfig, reconfig_callback)  # define dynamic_reconfigure callback
-        diag_pub = rospy.Publisher('diagnostics', DiagnosticArray, queue_size=1)
-        diag_pub_time = rospy.get_time();
+        self.pub = rospy.Publisher('imu', Imu, queue_size=1)
+        self.srv = Server(imuConfig, reconfig_callback)  # define dynamic_reconfigure callback
+        self.diag_pub = rospy.Publisher('diagnostics', DiagnosticArray, queue_size=1)
+        self.diag_pub_time = rospy.get_time();
 
-        imuMsg = Imu()
-
-        default_port='/dev/ttyUSB0'
-        port = rospy.get_param('~port', default_port)
-
-        #read calibration parameters
-        port = rospy.get_param('~port', default_port)
+        self.imuMsg = Imu()
 
         #accelerometer
-        accel_x_min = rospy.get_param('~accel_x_min', -250.0)
-        accel_x_max = rospy.get_param('~accel_x_max', 250.0)
-        accel_y_min = rospy.get_param('~accel_y_min', -250.0)
-        accel_y_max = rospy.get_param('~accel_y_max', 250.0)
-        accel_z_min = rospy.get_param('~accel_z_min', -250.0)
-        accel_z_max = rospy.get_param('~accel_z_max', 250.0)
+        self.accel_x_min = rospy.get_param('~accel_x_min', -250.0)
+        self.accel_x_max = rospy.get_param('~accel_x_max', 250.0)
+        self.accel_y_min = rospy.get_param('~accel_y_min', -250.0)
+        self.accel_y_max = rospy.get_param('~accel_y_max', 250.0)
+        self.accel_z_min = rospy.get_param('~accel_z_min', -250.0)
+        self.accel_z_max = rospy.get_param('~accel_z_max', 250.0)
 
         # magnetometer
-        magn_x_min = rospy.get_param('~magn_x_min', -600.0)
-        magn_x_max = rospy.get_param('~magn_x_max', 600.0)
-        magn_y_min = rospy.get_param('~magn_y_min', -600.0)
-        magn_y_max = rospy.get_param('~magn_y_max', 600.0)
-        magn_z_min = rospy.get_param('~magn_z_min', -600.0)
-        magn_z_max = rospy.get_param('~magn_z_max', 600.0)
-        calibration_magn_use_extended = rospy.get_param('~calibration_magn_use_extended', False)
-        magn_ellipsoid_center = rospy.get_param('~magn_ellipsoid_center', [0, 0, 0])
-        magn_ellipsoid_transform = rospy.get_param('~magn_ellipsoid_transform', [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
-        imu_yaw_calibration = rospy.get_param('~imu_yaw_calibration', 0.0)
+        self.magn_x_min = rospy.get_param('~magn_x_min', -600.0)
+        self.magn_x_max = rospy.get_param('~magn_x_max', 600.0)
+        self.magn_y_min = rospy.get_param('~magn_y_min', -600.0)
+        self.magn_y_max = rospy.get_param('~magn_y_max', 600.0)
+        self.magn_z_min = rospy.get_param('~magn_z_min', -600.0)
+        self.magn_z_max = rospy.get_param('~magn_z_max', 600.0)
+        self.calibration_magn_use_extended = rospy.get_param('~calibration_magn_use_extended', False)
+        self.magn_ellipsoid_center = rospy.get_param('~magn_ellipsoid_center', [0, 0, 0])
+        self.magn_ellipsoid_transform = rospy.get_param('~magn_ellipsoid_transform', [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+        self.imu_yaw_calibration = rospy.get_param('~imu_yaw_calibration', 0.0)
 
         # gyroscope
-        gyro_average_offset_x = rospy.get_param('~gyro_average_offset_x', 0.0)
-        gyro_average_offset_y = rospy.get_param('~gyro_average_offset_y', 0.0)
-        gyro_average_offset_z = rospy.get_param('~gyro_average_offset_z', 0.0)
+        self.gyro_average_offset_x = rospy.get_param('~gyro_average_offset_x', 0.0)
+        self.gyro_average_offset_y = rospy.get_param('~gyro_average_offset_y', 0.0)
+        self.gyro_average_offset_z = rospy.get_param('~gyro_average_offset_z', 0.0)
 
         #rospy.loginfo("%f %f %f %f %f %f", accel_x_min, accel_x_max, accel_y_min, accel_y_max, accel_z_min, accel_z_max)
         #rospy.loginfo("%f %f %f %f %f %f", magn_x_min, magn_x_max, magn_y_min, magn_y_max, magn_z_min, magn_z_max)
