@@ -27,8 +27,8 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-#This script sends commands to the imu, recieves data from it and 
-#process the data into a ROS IMU message to publish to a topic
+#This script sends commands to the socket to raspi, recieves data from it and 
+#process the data into a ROS IMU message to publish to a imu topic
 
 import rospy
 import serial
@@ -49,60 +49,70 @@ degrees2rad = math.pi/180.0
 imu_yaw_calibration = 0.0
 
 
-# Orientation covariance estimation:
-# Observed orientation noise: 0.3 degrees in x, y, 0.6 degrees in z
-# Magnetometer linearity: 0.1% of full scale (+/- 2 gauss) => 4 milligauss
-# Earth's magnetic field strength is ~0.5 gauss, so magnetometer nonlinearity could
-# cause ~0.8% yaw error (4mgauss/0.5 gauss = 0.008) => 2.8 degrees, or 0.050 radians
-# i.e. variance in yaw: 0.0025
-# Accelerometer non-linearity: 0.2% of 4G => 0.008G. This could cause
-# static roll/pitch error of 0.8%, owing to gravity orientation sensing
-# error => 2.8 degrees, or 0.05 radians. i.e. variance in roll/pitch: 0.0025
-# so set all covariances the same.
-imuMsg.orientation_covariance = [
-0.0025 , 0 , 0,
-0, 0.0025, 0,
-0, 0, 0.0025
-]
-
-# Angular velocity covariance estimation:
-# Observed gyro noise: 4 counts => 0.28 degrees/sec
-# nonlinearity spec: 0.2% of full scale => 8 degrees/sec = 0.14 rad/sec
-# Choosing the larger (0.14) as std dev, variance = 0.14^2 ~= 0.02
-imuMsg.angular_velocity_covariance = [
-0.02, 0 , 0,
-0 , 0.02, 0,
-0 , 0 , 0.02
-]
-
-# linear acceleration covariance estimation:
-# observed acceleration noise: 5 counts => 20milli-G's ~= 0.2m/s^2
-# nonliniarity spec: 0.5% of full scale => 0.2m/s^2
-# Choosing 0.2 as std dev, variance = 0.2^2 = 0.04
-imuMsg.linear_acceleration_covariance = [
-0.04 , 0 , 0,
-0 , 0.04, 0,
-0 , 0 , 0.04
-]
-
 class imu_node():
 
     def __init__(self):
         self.host = rospy.get_param('~port', '192.168.17.201')
-        self.port = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-        self.port.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        self.port.setsockopt(socket.SOL_TCP, socket.TCP_KEEPIDLE, 30)
-        self.port.setsockopt(socket.SOL_TCP, socket.TCP_KEEPINTVL, 15)
+
+        UDP_IP = "0.0.0.0" #any interface that tries to connect on the laptop  
+        # UDP_IP = '' #symbolic for all interfaces
+        UDP_PORT = 7778
+
+        self.addr = (UDP_IP,UDP_PORT)
+        #udp to get sensor command 
+        self.imu_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
+        self.imu_sock.bind((UDP_IP, UDP_PORT))
+        # self.imu_sock.listen(1)
+        # conn, addr = self.imu_sock.accept()
+
+        # self.imu_sock.connect((self.host,UDP_PORT))
+        self.imu_sock.settimeout(.02)
+        print "CONNECTED to imu!"
 
         rospy.init_node("razor_node")
         #We only care about the most recent measurement, i.e. queue_size=1
         self.pub = rospy.Publisher('imu', Imu, queue_size=1)
-        self.srv = Server(imuConfig, reconfig_callback)  # define dynamic_reconfigure callback
+        self.srv = Server(imuConfig, self.reconfig_callback)  # define dynamic_reconfigure callback
         self.diag_pub = rospy.Publisher('diagnostics', DiagnosticArray, queue_size=1)
         self.diag_pub_time = rospy.get_time();
 
         self.imuMsg = Imu()
 
+        # Orientation covariance estimation:
+        # Observed orientation noise: 0.3 degrees in x, y, 0.6 degrees in z
+        # Magnetometer linearity: 0.1% of full scale (+/- 2 gauss) => 4 milligauss
+        # Earth's magnetic field strength is ~0.5 gauss, so magnetometer nonlinearity could
+        # cause ~0.8% yaw error (4mgauss/0.5 gauss = 0.008) => 2.8 degrees, or 0.050 radians
+        # i.e. variance in yaw: 0.0025
+        # Accelerometer non-linearity: 0.2% of 4G => 0.008G. This could cause
+        # static roll/pitch error of 0.8%, owing to gravity orientation sensing
+        # error => 2.8 degrees, or 0.05 radians. i.e. variance in roll/pitch: 0.0025
+        # so set all covariances the same.
+        self.imuMsg.orientation_covariance = [
+        0.0025 , 0 , 0,
+        0, 0.0025, 0,
+        0, 0, 0.0025
+        ]
+
+        # Angular velocity covariance estimation:
+        # Observed gyro noise: 4 counts => 0.28 degrees/sec
+        # nonlinearity spec: 0.2% of full scale => 8 degrees/sec = 0.14 rad/sec
+        # Choosing the larger (0.14) as std dev, variance = 0.14^2 ~= 0.02
+        self.imuMsg.angular_velocity_covariance = [
+        0.02, 0 , 0,
+        0 , 0.02, 0,
+        0 , 0 , 0.02
+        ]
+
+        # linear acceleration covariance estimation:
+        # observed acceleration noise: 5 counts => 20milli-G's ~= 0.2m/s^2
+        # nonliniarity spec: 0.5% of full scale => 0.2m/s^2
+        # Choosing 0.2 as std dev, variance = 0.2^2 = 0.04
+        self.imuMsg.linear_acceleration_covariance = [
+        0.04 , 0 , 0,
+        0 , 0.04, 0,
+        0 , 0 , 0.04
+        ]
         #accelerometer
         self.accel_x_min = rospy.get_param('~accel_x_min', -250.0)
         self.accel_x_max = rospy.get_param('~accel_x_max', 250.0)
@@ -133,14 +143,6 @@ class imu_node():
         #rospy.loginfo("%s %s %s", str(calibration_magn_use_extended), str(self.magn_ellipsoid_center), str(self.magn_ellipsoid_transform[0][0]))
         #rospy.loginfo("%f %f %f", gyro_average_offset_x, gyro_average_offset_y, gyro_average_offset_z)
 
-        # Check your COM port and baud rate
-        rospy.loginfo("Opening %s...", port)
-        try:
-            ser = serial.Serial(port=port, baudrate=57600, timeout=1)
-        except serial.serialutil.SerialException:
-            rospy.logerr("IMU not found at port "+port + ". Did you specify the correct port in the launch file?")
-            #exit
-            sys.exit(0)
 
         roll=0
         pitch=0
@@ -153,72 +155,68 @@ class imu_node():
 
         ### configure board ###
         #stop datastream
-        ser.write('#o0' + chr(13))
+        #sendto is udp
+        self.imu_sock.sendto('#o0' + chr(13),self.addr)
 
-        #discard old input
-        #automatic flush - NOT WORKING
-        #ser.flushInput()  #discard old input, still in invalid format
-        #flush manually, as above command is not working
-        discard = ser.readlines() 
+        #TO-DO Maybe flush input here
 
         #set output mode
-        ser.write('#ox' + chr(13)) # To start display angle and sensor reading in text
+        self.imu_sock.sendto('#ox' + chr(13),self.addr) # To start display angle and sensor reading in text
 
         rospy.loginfo("Writing calibration values to razor IMU board...")
 
         #set calibration values
-        ser.write('#caxm' + str(self.accel_x_min) + chr(13))
-        ser.write('#caxM' + str(self.accel_x_max) + chr(13))
-        ser.write('#caym' + str(self.accel_y_min) + chr(13))
-        ser.write('#cayM' + str(self.accel_y_max) + chr(13))
-        ser.write('#cazm' + str(self.accel_z_min) + chr(13))
-        ser.write('#cazM' + str(self.accel_z_max) + chr(13))
+        self.imu_sock.sendto('#caxm' + str(self.accel_x_min) + chr(13),self.addr)
+        self.imu_sock.sendto('#caxM' + str(self.accel_x_max) + chr(13),self.addr)
+        self.imu_sock.sendto('#caym' + str(self.accel_y_min) + chr(13),self.addr)
+        self.imu_sock.sendto('#cayM' + str(self.accel_y_max) + chr(13),self.addr)
+        self.imu_sock.sendto('#cazm' + str(self.accel_z_min) + chr(13),self.addr)
+        self.imu_sock.sendto('#cazM' + str(self.accel_z_max) + chr(13),self.addr)
 
         #calibration values for magnetometer
-        if (not calibration_magn_use_extended):
-            ser.write('#cmxm' + str(self.magn_x_min) + chr(13))
-            ser.write('#cmxM' + str(self.magn_x_max) + chr(13))
-            ser.write('#cmym' + str(self.magn_y_min) + chr(13))
-            ser.write('#cmyM' + str(self.magn_y_max) + chr(13))
-            ser.write('#cmzm' + str(self.magn_z_min) + chr(13))
-            ser.write('#cmzM' + str(self.magn_z_max) + chr(13))
+        if (not self.calibration_magn_use_extended):
+            self.imu_sock.sendto('#cmxm' + str(self.magn_x_min) + chr(13),self.addr)
+            self.imu_sock.sendto('#cmxM' + str(self.magn_x_max) + chr(13),self.addr)
+            self.imu_sock.sendto('#cmym' + str(self.magn_y_min) + chr(13),self.addr)
+            self.imu_sock.sendto('#cmyM' + str(self.magn_y_max) + chr(13),self.addr)
+            self.imu_sock.sendto('#cmzm' + str(self.magn_z_min) + chr(13),self.addr)
+            self.imu_sock.sendto('#cmzM' + str(self.magn_z_max) + chr(13),self.addr)
         else:
-            ser.write('#ccx' + str(self.magn_ellipsoid_center[0]) + chr(13))
-            ser.write('#ccy' + str(self.magn_ellipsoid_center[1]) + chr(13))
-            ser.write('#ccz' + str(self.magn_ellipsoid_center[2]) + chr(13))
-            ser.write('#ctxX' + str(self.magn_ellipsoid_transform[0][0]) + chr(13))
-            ser.write('#ctxY' + str(self.magn_ellipsoid_transform[0][1]) + chr(13))
-            ser.write('#ctxZ' + str(self.magn_ellipsoid_transform[0][2]) + chr(13))
-            ser.write('#ctyX' + str(self.magn_ellipsoid_transform[1][0]) + chr(13))
-            ser.write('#ctyY' + str(self.magn_ellipsoid_transform[1][1]) + chr(13))
-            ser.write('#ctyZ' + str(self.magn_ellipsoid_transform[1][2]) + chr(13))
-            ser.write('#ctzX' + str(self.magn_ellipsoid_transform[2][0]) + chr(13))
-            ser.write('#ctzY' + str(self.magn_ellipsoid_transform[2][1]) + chr(13))
-            ser.write('#ctzZ' + str(self.magn_ellipsoid_transform[2][2]) + chr(13))
+            self.imu_sock.sendto('#ccx' + str(self.magn_ellipsoid_center[0]) + chr(13),self.addr)
+            self.imu_sock.sendto('#ccy' + str(self.magn_ellipsoid_center[1]) + chr(13),self.addr)
+            self.imu_sock.sendto('#ccz' + str(self.magn_ellipsoid_center[2]) + chr(13),self.addr)
+            self.imu_sock.sendto('#ctxX' + str(self.magn_ellipsoid_transform[0][0]) + chr(13),self.addr)
+            self.imu_sock.sendto('#ctxY' + str(self.magn_ellipsoid_transform[0][1]) + chr(13),self.addr)
+            self.imu_sock.sendto('#ctxZ' + str(self.magn_ellipsoid_transform[0][2]) + chr(13),self.addr)
+            self.imu_sock.sendto('#ctyX' + str(self.magn_ellipsoid_transform[1][0]) + chr(13),self.addr)
+            self.imu_sock.sendto('#ctyY' + str(self.magn_ellipsoid_transform[1][1]) + chr(13),self.addr)
+            self.imu_sock.sendto('#ctyZ' + str(self.magn_ellipsoid_transform[1][2]) + chr(13),self.addr)
+            self.imu_sock.sendto('#ctzX' + str(self.magn_ellipsoid_transform[2][0]) + chr(13),self.addr)
+            self.imu_sock.sendto('#ctzY' + str(self.magn_ellipsoid_transform[2][1]) + chr(13),self.addr)
+            self.imu_sock.sendto('#ctzZ' + str(self.magn_ellipsoid_transform[2][2]) + chr(13),self.addr)
 
         #Compensating for offset of gyro-drift 
-        ser.write('#cgx' + str(self.gyro_average_offset_x) + chr(13))
-        ser.write('#cgy' + str(self.gyro_average_offset_y) + chr(13))
-        ser.write('#cgz' + str(self.gyro_average_offset_z) + chr(13))
+        self.imu_sock.sendto('#cgx' + str(self.gyro_average_offset_x) + chr(13),self.addr)
+        self.imu_sock.sendto('#cgy' + str(self.gyro_average_offset_y) + chr(13),self.addr)
+        self.imu_sock.sendto('#cgz' + str(self.gyro_average_offset_z) + chr(13),self.addr)
 
         #print calibration values for verification by user
-        ser.flushInput()
-        ser.write('#p' + chr(13))
-        calib_data = ser.readlines()
+        self.imu_sock.sendto('#p' + chr(13),self.addr)
+        calib_data = self.imu_sock.recv(4096)
         calib_data_print = "Printing set calibration values:\r\n"
         for line in calib_data:
             calib_data_print += line
         rospy.loginfo(calib_data_print)
 
         #start datastream
-        ser.write('#o1' + chr(13))
+        self.imu_sock.sendto('#ox' + chr(13),self.addr)
 
         #automatic flush - NOT WORKING
         #ser.flushInput()  #discard old input, still in invalid format
         #flush manually, as above command is not working - it breaks the serial connection
         rospy.loginfo("Flushing first 200 IMU entries...")
-        for x in range(0, 200):
-            line = ser.readline()
+        for x in range(0, 10):
+            line = self.imu_sock.recv(4096)
         rospy.loginfo("Publishing IMU data...")
         #f = open("raw_imu_data.log", 'w')
 
@@ -234,7 +232,7 @@ class imu_node():
 
     def run(self):
         while not rospy.is_shutdown():
-            line = ser.readline()
+            line = self.imu_sock.recv(4096)
             line = line.replace("#YPRAG=","")   # Delete "#YPRAG="
             #f.write(line)                     # Write to the output log file
             words = string.split(line,",")    # Fields split
@@ -254,29 +252,29 @@ class imu_node():
                 # Publish message
                 # AHRS firmware accelerations are negated
                 # This means y and z are correct for ROS, but x needs reversing
-                imuMsg.linear_acceleration.x = -float(words[3]) * accel_factor
-                imuMsg.linear_acceleration.y = float(words[4]) * accel_factor
-                imuMsg.linear_acceleration.z = float(words[5]) * accel_factor
+                self.imuMsg.linear_acceleration.x = -float(words[3]) * accel_factor
+                self.imuMsg.linear_acceleration.y = float(words[4]) * accel_factor
+                self.imuMsg.linear_acceleration.z = float(words[5]) * accel_factor
 
-                imuMsg.angular_velocity.x = float(words[6])
+                self.imuMsg.angular_velocity.x = float(words[6])
                 #in AHRS firmware y axis points right, in ROS y axis points left (see REP 103)
-                imuMsg.angular_velocity.y = -float(words[7])
+                self.imuMsg.angular_velocity.y = -float(words[7])
                 #in AHRS firmware z axis points down, in ROS z axis points up (see REP 103) 
-                imuMsg.angular_velocity.z = -float(words[8])
+                self.imuMsg.angular_velocity.z = -float(words[8])
 
-            q = quaternion_from_euler(roll,pitch,yaw)
-            imuMsg.orientation.x = q[0]
-            imuMsg.orientation.y = q[1]
-            imuMsg.orientation.z = q[2]
-            imuMsg.orientation.w = q[3]
-            imuMsg.header.stamp= rospy.Time.now()
-            imuMsg.header.frame_id = 'base_imu_link'
-            imuMsg.header.seq = seq
-            seq = seq + 1
-            pub.publish(imuMsg)
+                q = quaternion_from_euler(roll,pitch,yaw)
+                self.imuMsg.orientation.x = q[0]
+                self.imuMsg.orientation.y = q[1]
+                self.imuMsg.orientation.z = q[2]
+                self.imuMsg.orientation.w = q[3]
+                self.imuMsg.header.stamp= rospy.Time.now()
+                self.imuMsg.header.frame_id = 'base_imu_link'
+                self.imuMsg.header.seq = seq
+                seq = seq + 1
+                pub.publish(self.imuMsg)
 
-            if (diag_pub_time < rospy.get_time()) :
-                diag_pub_time += 1
+            if (self.diag_pub_time < rospy.get_time()) :
+                self.diag_pub_time += 1
                 diag_arr = DiagnosticArray()
                 diag_arr.header.stamp = rospy.get_rostime()
                 diag_arr.header.frame_id = '1'
@@ -292,5 +290,9 @@ class imu_node():
                                         str(yaw*(180.0/math.pi))))
                 diag_msg.values.append(KeyValue('sequence number', str(seq)))
                 diag_arr.status.append(diag_msg)
-                diag_pub.publish(diag_arr)
+                self.diag_pub.publish(diag_arr)
             
+
+if __name__ == '__main__':
+    imu_node = imu_node()
+    imu_node.run()
