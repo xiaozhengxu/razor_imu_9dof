@@ -25,7 +25,7 @@ imu_yaw_calibration = 0.0
 class IMU_comm:
     def __init__(self):
         #Set up udp and tcp sockets
-        self.host = rospy.get_param('~port', '192.168.17.209')
+        self.host = rospy.get_param('host', '192.168.17.209')
         self.port = 7778
         self.UDP_IP = "0.0.0.0" #any interface that tries to connect on the laptop  
         self.addr = (self.host, self.port)
