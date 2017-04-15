@@ -1,5 +1,34 @@
 #!/usr/bin/env python
 
+# Copyright (c) 2012, Tang Tiong Yew
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    * Redistributions of source code must retain the above copyright
+#      notice, this list of conditions and the following disclaimer.
+#    * Redistributions in binary form must reproduce the above copyright
+#      notice, this list of conditions and the following disclaimer in the
+#      documentation and/or other materials provided with the distribution.
+#    * Neither the name of the Willow Garage, Inc. nor the names of its
+#      contributors may be used to endorse or promote products derived from
+#       this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+#This script sends commands to the socket to raspi, recieves data from it and 
+#process the data into a ROS IMU message to publish to a imu topic
 
 
 import rospy
@@ -176,15 +205,11 @@ class IMU_comm:
         #automatic flush - NOT WORKING
         #ser.flushInput()  #discard old input, still in invalid format
         #flush manually, as above command is not working - it breaks the serial connection
-        rospy.loginfo("Flushing first 200 IMU entries...")
-        for x in range(0, 200):
-            if x%40 == 0:
-                print "Entry number:", x
+        rospy.loginfo("Flushing first 100 IMU entries...")
+        for x in range(0, 100):
             line = self.recv_all()
-            print line , x
-            if len(line) == 0:
-                print "end!"
-                break
+            print "entry", x, ":", line
+
         print "done flushing"
         # self.imu_sock.send('#ox' + '\n')   
         rospy.loginfo("Publishing IMU data...")
@@ -199,6 +224,7 @@ class IMU_comm:
         return config
 
     def run(self):
+        """This function recieves data from the socket and published a IMU message to ROS"""
         while not rospy.is_shutdown():
             line = self.recv_all()
 
@@ -208,9 +234,17 @@ class IMU_comm:
                 continue
             #f.write(line)                     # Write to the output log file
             words = string.split(line,",")    # Fields split
-            if len(words) > 2:
+
+            #Try to convert words from string to float, if a value doesn't work, continue to the next loop
+            try:
+                words = [float(word) for word in words]
+            except ValueError:
+                print "Failed to parse data into 9 values.. No big concern"
+                continue 
+            
+            if len(words) == 9:
                 #in AHRS firmware z axis points down, in ROS z axis points up (see REP 103)
-                yaw_deg = -float(words[0])
+                yaw_deg = -words[0]
                 yaw_deg = yaw_deg + imu_yaw_calibration
                 if yaw_deg > 180.0:
                     yaw_deg = yaw_deg - 360.0
@@ -218,22 +252,19 @@ class IMU_comm:
                     yaw_deg = yaw_deg + 360.0
                 self.yaw = yaw_deg*degrees2rad
                 #in AHRS firmware y axis points right, in ROS y axis points left (see REP 103)
-                self.pitch = -float(words[1])*degrees2rad
-                self.roll = float(words[2])*degrees2rad
-
-            if len(words) > 5:
+                self.pitch = -words[1]*degrees2rad
+                self.roll = words[2]*degrees2rad
                 # AHRS firmware accelerations are negated
                 # This means y and z are correct for ROS, but x needs reversing
-                self.imuMsg.linear_acceleration.x = -float(words[3]) * self.accel_factor
-                self.imuMsg.linear_acceleration.y = float(words[4]) * self.accel_factor
-                self.imuMsg.linear_acceleration.z = float(words[5]) * self.accel_factor
+                self.imuMsg.linear_acceleration.x = -words[3] * self.accel_factor
+                self.imuMsg.linear_acceleration.y = words[4] * self.accel_factor
+                self.imuMsg.linear_acceleration.z = words[5] * self.accel_factor
 
-            if len(words) > 8:
-                self.imuMsg.angular_velocity.x = float(words[6])
+                self.imuMsg.angular_velocity.x = words[6]
                 #in AHRS firmware y axis points right, in ROS y axis points left (see REP 103)
-                self.imuMsg.angular_velocity.y = -float(words[7])
+                self.imuMsg.angular_velocity.y = -words[7]
                 #in AHRS firmware z axis points down, in ROS z axis points up (see REP 103) 
-                self.imuMsg.angular_velocity.z = -float(words[8])
+                self.imuMsg.angular_velocity.z = -words[8]
 
                 q = quaternion_from_euler(self.roll,self.pitch,self.yaw)
                 self.imuMsg.orientation.x = q[0]
@@ -245,8 +276,10 @@ class IMU_comm:
                 self.imuMsg.header.seq = self.seq
                 self.seq = self.seq + 1
 
-            #Publish message
-            self.pub.publish(self.imuMsg)
+                #Publish message
+                self.pub.publish(self.imuMsg)
+            else:
+                print "Recieved less than 9 values from socket, not publishing"
 
             if (self.diag_pub_time < rospy.get_time()) :
                 self.diag_pub_time += 1
