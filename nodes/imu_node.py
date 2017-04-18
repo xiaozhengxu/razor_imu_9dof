@@ -54,14 +54,15 @@ imu_yaw_calibration = 0.0
 class IMU_comm:
     def __init__(self):
         #Set up udp and tcp sockets
-        self.host = rospy.get_param('host', '192.168.17.209')
+        self.host = rospy.get_param('/imu_node/host', '192.168.17.210')
+        print("Host set to", self.host)
         self.port = 7778
         self.UDP_IP = "0.0.0.0" #any interface that tries to connect on the laptop  
         self.addr = (self.host, self.port)
         self.imu_sock = self.setup_TCP_sock()
-        print "TCP socket setup"
+        print("TCP socket setup")
         self.udp_sock = self.setup_UDP_sock()
-        print "UDP socket setup"
+        print("UDP socket setup")
 
         #set up ROS nodes and publisher
         rospy.init_node("razor_node")
